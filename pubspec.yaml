@@ -32,6 +32,8 @@ dependencies:
   dotted_border: ^2.0.0+1
   flutter:
     sdk: flutter
+  image: ^3.0.8
+  image_cropper: ^1.4.1
 
 dev_dependencies:
   camera_platform_interface: ^2.1.1
