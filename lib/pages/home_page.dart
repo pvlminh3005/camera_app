@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:camera/camera.dart';
 import 'package:camera_app/utils/crop_image.dart';
@@ -17,7 +18,7 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   File? imageFile;
-  late var data;
+  Uint8List? data;
   late CameraController controller;
   late Future<void> _initializeControllerFuture;
 
@@ -27,7 +28,7 @@ class _HomePageState extends State<HomePage> {
 
     controller = CameraController(
       cameras[0],
-      ResolutionPreset.max,
+      ResolutionPreset.medium,
     );
     _initializeControllerFuture = controller.initialize();
   }
@@ -52,29 +53,26 @@ class _HomePageState extends State<HomePage> {
               future: _initializeControllerFuture,
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.done) {
-                  return _buildCameraScreen(context);
+                  return _buildCameraScreen();
                 } else {
                   return const Center(child: CircularProgressIndicator());
                 }
               },
             ),
-            imageFile == null
-                ? const SizedBox.shrink()
-                : AspectRatio(
-                    aspectRatio: 5 / 3,
-                    child: Image.file(
-                      imageFile!,
-                      fit: BoxFit.cover,
-                    ),
-                  ),
+            data == null ? const SizedBox.shrink() : Image.memory(data!)
           ],
         ),
       ),
     );
   }
 
-  Widget _buildCameraScreen(BuildContext context) {
-    Size size = MediaQuery.of(context).size;
+  Widget _buildCameraScreen() {
+    double widthCamera = MediaQuery.of(context).size.width;
+    double heightCamera =
+        MediaQuery.of(context).size.width * controller.value.aspectRatio;
+    double widthCrop = widthCamera * .8;
+    double heightCrop = heightCamera * .5;
+
     return Padding(
       padding: const EdgeInsets.all(8.0),
       child: Column(
@@ -84,21 +82,21 @@ class _HomePageState extends State<HomePage> {
             alignment: Alignment.center,
             children: [
               SizedBox(
-                width: size.width,
-                height: size.width * .8 * controller.value.aspectRatio,
+                width: widthCamera,
+                height: heightCamera,
                 child: CameraPreview(controller),
               ),
               Container(
                 alignment: Alignment.center,
-                margin: const EdgeInsets.symmetric(horizontal: 10),
                 child: DottedBorder(
                   dashPattern: const [6, 10],
                   color: Colors.white,
                   strokeWidth: 4,
                   borderType: BorderType.RRect,
                   radius: const Radius.circular(10),
-                  child: const AspectRatio(
-                    aspectRatio: 5 / 3,
+                  child: SizedBox(
+                    width: widthCrop,
+                    height: heightCrop,
                   ),
                 ),
               ),
@@ -110,8 +108,29 @@ class _HomePageState extends State<HomePage> {
               try {
                 await _initializeControllerFuture;
                 final image = await controller.takePicture();
-                // File? cropImage = await Utils.cropImage(image.path);
+                final src = img.decodeImage(File(image.path).readAsBytesSync());
+
+                //get ratio size image vs size camera
+                var widthRatio = src!.width / widthCamera;
+                var heightRatio = src.height / heightCamera;
+
+                final newRect = Rect.fromLTWH(
+                  (src.width - widthCrop * widthRatio) / 2,
+                  (src.height - heightCrop * widthRatio) / 2,
+                  widthCrop * widthRatio,
+                  heightCrop * heightRatio,
+                );
+
+                final copyImage = Utils.cropImage(
+                  src: src,
+                  x: newRect.left.floor(),
+                  y: newRect.top.floor(),
+                  w: newRect.width.floor(),
+                  h: newRect.height.floor(),
+                );
+
                 setState(() {
+                  data = Uint8List.fromList(img.encodePng(copyImage));
                   imageFile = File(image.path);
                 });
               } catch (e) {
